@@ -58,16 +58,6 @@ impl IcoFace {
             .and_then(|row| row.get(coordinates.x));
     }
 
-    pub fn get_mut_deltille_options_at(
-        &mut self,
-        coordinates: &DeltilleCoordinates,
-    ) -> Option<&mut Vec<Deltille>> {
-        return self
-            .deltilles
-            .get_mut(coordinates.y)
-            .and_then(|row| row.get_mut(coordinates.x));
-    }
-
 }
 
 fn up_face_deltilles_initial(
