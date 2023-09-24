@@ -1,10 +1,27 @@
-use bevy::prelude::*;
+mod icosahedron;
 
-const VIEW_SCALE: f32 = 16.;
-const SIDE_LENGTH_HALF: u16 = 10;
-const SIDE_LENGTH: u16 = SIDE_LENGTH_HALF * 2;
-const GAP_SIZE_HALF: u16 = 1;
-const GAP_SIZE: u16 = GAP_SIZE_HALF * 2;
+use std::array::from_fn;
+
+use bevy::prelude::*;
+use bevy::window::WindowResolution;
+use icosahedron::*;
+
+const VIEW_SCALE: f32 = 9.0;
+const DELTILLE_GRID_WIDTH: usize = 16;
+const GAP_GRID_WIDTH_HALF: usize = 1;
+const FACE_DELTILLE_WIDTH: usize = 3;
+
+const GAP_GRID_WIDTH: usize = GAP_GRID_WIDTH_HALF * 2;
+const SQRT_0_POINT_75: f32 = 0.86602540378443864676372317075293;
+const DELTILLE_GRID_HEIGHT: usize = (DELTILLE_GRID_WIDTH as f32 * SQRT_0_POINT_75) as usize + 1;
+const DELTILLE_GRID_HEIGHT_HALF: f32 = DELTILLE_GRID_HEIGHT as f32 / 2.0;
+const DELTILLE_GRID_WIDTH_HALF: f32 = DELTILLE_GRID_WIDTH as f32 / 2.0;
+const FACE_GRID_WIDTH: usize = FACE_DELTILLE_WIDTH as usize * DELTILLE_GRID_WIDTH as usize;
+// faces are slightly taller to accomodate imperfect deltille pixel heights
+const FACE_GRID_HEIGHT: usize = DELTILLE_GRID_HEIGHT as usize * FACE_DELTILLE_WIDTH as usize;
+const FACE_GRID_HEIGHT_HALF: f32 = FACE_GRID_HEIGHT as f32 * 0.5;
+const WINDOW_GRID_WIDTH: usize = 5 * (FACE_GRID_WIDTH as usize + GAP_GRID_WIDTH as usize * 2);
+const WINDOW_GRID_HEIGHT: usize = 2 * FACE_GRID_HEIGHT as usize;
 
 fn main() {
     App::new()
@@ -12,8 +29,11 @@ fn main() {
             DefaultPlugins
                 .set(WindowPlugin {
                     primary_window: Some(Window {
-                        title: "Icosphere Texture Generator".into(),
-                        resolution: (window_width_px(), window_height_px()).into(),
+                        title: "Icosphere Texture Generator".to_string(),
+                        resolution: WindowResolution::new(
+                            WINDOW_GRID_WIDTH as f32 * VIEW_SCALE,
+                            WINDOW_GRID_HEIGHT as f32 * VIEW_SCALE,
+                        ),
                         ..default()
                     }),
                     ..default()
@@ -21,192 +41,358 @@ fn main() {
                 .set(ImagePlugin::default_nearest()),
         )
         .add_systems(Startup, setup)
-        .add_systems(Update, draw_triangles)
+        .add_systems(PostStartup, place_deltille_sprites)
+        .add_systems(Update, draw_debug)
         .run();
 }
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.spawn(Camera2dBundle::default());
+    commands.spawn(Camera2dBundle {
+        projection: OrthographicProjection {
+            scale: 1.0 / VIEW_SCALE,
+            ..default()
+        },
+        transform: Transform::from_xyz(
+            WINDOW_GRID_WIDTH as f32 / 2.0,
+            WINDOW_GRID_HEIGHT as f32 / 2.0,
+            1.0,
+        ),
+        ..default()
+    });
+
     let trile_handle: Handle<Image> = asset_server.load("land_both_corners.png");
 
-    let width_pixels: f32 = window_width_px();
-    let height_pixels: f32 = window_height_px();
-    let x_max: f32 = width_pixels / 2.;
-    let y_max: f32 = height_pixels / 2.;
-    let x_min: f32 = -x_max;
-    let y_min: f32 = -y_max;
-    let half_trile_width = SIDE_LENGTH_HALF as f32 * VIEW_SCALE;
-    let half_trile_height = half_trile_width * f32::sqrt(0.75);
-    let offset_up = Vec2::new(half_trile_width, half_trile_height);
-    let offset_down = Vec2::new(half_trile_width, -half_trile_height);
+    let up_deltille = Deltille {
+        image_handle: trile_handle.clone(),
+        flip_x: false,
+        sockets: Sockets::Up {
+            nw: "".to_string(),
+            ne: "".to_string(),
+            s: "".to_string(),
+        },
+    };
 
-    // bottom row triangles
-    let period_x = (SIDE_LENGTH + GAP_SIZE) as f32 * VIEW_SCALE;
-    let half_side_left_min_x = x_min - SIDE_LENGTH_HALF as f32 * VIEW_SCALE;
-    let mut origin = Vec2::new(half_side_left_min_x, y_min);
-    for _ in 0..6 {
-        commands.spawn(SpriteBundle {
-            texture: trile_handle.clone(),
-            transform: Transform {
-                translation: (origin + offset_up).extend(0.),
-                scale: Vec3::new(20., 20., 1.), // something is off with the fractional part here
-                ..default()
-            },
-            ..default()
+    let down_deltille = Deltille {
+        image_handle: trile_handle.clone(),
+        flip_x: false,
+        sockets: Sockets::Down {
+            n: "".to_string(),
+            se: "".to_string(),
+            sw: "".to_string(),
+        },
+    };
+
+    let up_icoface = IcoFace {
+        deltilles: up_face_deltilles_initial(
+            vec![up_deltille.clone()],
+            vec![down_deltille.clone()],
+        ),
+    };
+
+    let down_icoface = IcoFace {
+        deltilles: down_face_deltilles_initial(
+            vec![up_deltille.clone()],
+            vec![down_deltille.clone()],
+        ),
+    };
+
+    let icosahedron = Icosahedron {
+        faces: [
+            from_fn(|_| up_icoface.clone()),
+            from_fn(|_| down_icoface.clone()),
+            from_fn(|_| up_icoface.clone()),
+            from_fn(|_| down_icoface.clone()),
+        ],
+    };
+
+    commands.spawn(icosahedron);
+}
+
+fn up_face_deltilles_initial(
+    up_deltille_options: Vec<Deltille>,
+    down_deltille_options: Vec<Deltille>,
+) -> Vec<Vec<Vec<Deltille>>> {
+    let rowcount = FACE_DELTILLE_WIDTH as usize * 2 - 1;
+    let mut rows: Vec<Vec<Vec<Deltille>>> = Vec::with_capacity(rowcount);
+    for i in 0..rowcount {
+        let row_size = (2 + i) / 2;
+        let mut row: Vec<Vec<Deltille>> = Vec::with_capacity(row_size);
+        row.resize_with(row_size, || {
+            if i % 2 == 0 {
+                up_deltille_options.clone()
+            } else {
+                down_deltille_options.clone()
+            }
         });
-        origin = Vec2::new(origin.x + period_x, origin.y);
+        rows.push(row);
     }
+    return rows;
+}
 
-    // row 2 triangles
-    let half_gap_right_min_x = x_min + GAP_SIZE_HALF as f32 * VIEW_SCALE;
-    origin = Vec2::new(half_gap_right_min_x, 0.);
-    for _ in 0..5 {
-        commands.spawn(SpriteBundle {
-            texture: trile_handle.clone(),
-            transform: Transform {
-                translation: (origin + offset_down).extend(0.),
-                scale: Vec3::new(20., 20., 1.),
-                ..default()
-            },
-            sprite: Sprite {
-                flip_y: true,
-                ..default()
-            },
-            ..default()
+fn down_face_deltilles_initial(
+    up_deltille_options: Vec<Deltille>,
+    down_deltille_options: Vec<Deltille>,
+) -> Vec<Vec<Vec<Deltille>>> {
+    let rowcount = FACE_DELTILLE_WIDTH as usize * 2 - 1;
+    let mut rows: Vec<Vec<Vec<Deltille>>> = Vec::with_capacity(rowcount);
+    for i in (0..rowcount).rev() {
+        let row_size = (2 + i) / 2;
+        let mut row: Vec<Vec<Deltille>> = Vec::with_capacity(row_size);
+        row.resize_with(row_size, || {
+            if i % 2 == 0 {
+                down_deltille_options.clone()
+            } else {
+                up_deltille_options.clone()
+            }
         });
-        origin = Vec2::new(origin.x + period_x, origin.y);
+        rows.push(row);
     }
+    return rows;
+}
 
-    // row 3 triangles
-    origin = Vec2::new(half_gap_right_min_x, 0.);
-    for _ in 0..5 {
-        commands.spawn(SpriteBundle {
-            texture: trile_handle.clone(),
-            transform: Transform {
-                translation: (origin + offset_up).extend(0.),
-                scale: Vec3::new(20., 20., 1.),
-                ..default()
-            },
-            ..default()
-        });
-        origin = Vec2::new(origin.x + period_x, origin.y);
+fn draw_debug(mut gizmos: Gizmos, icosahedron_query: Query<&Icosahedron>) {
+    let icosahedron = icosahedron_query.get_single().unwrap();
+    draw_pixel_grid(&mut gizmos);
+    draw_icoface_outlines(&mut gizmos, icosahedron);
+}
+
+fn draw_pixel_grid(gizmos: &mut Gizmos) {
+    for x in 0..WINDOW_GRID_WIDTH {
+        gizmos.line_2d(
+            Vec2::new(x as f32, 0.0),
+            Vec2::new(x as f32, WINDOW_GRID_HEIGHT as f32),
+            Color::DARK_GRAY,
+        );
     }
-
-    // top row triangles
-    origin = Vec2::new(half_side_left_min_x, y_max);
-    for _ in 0..6 {
-        commands.spawn(SpriteBundle {
-            texture: trile_handle.clone(),
-            transform: Transform {
-                translation: (origin + offset_down).extend(0.),
-                scale: Vec3::new(20., 20., 1.),
-                ..default()
-            },
-            sprite: Sprite {
-                flip_y: true,
-                ..default()
-            },
-            ..default()
-        });
-        origin = Vec2::new(origin.x + period_x, origin.y);
+    for y in 0..WINDOW_GRID_HEIGHT {
+        gizmos.line_2d(
+            Vec2::new(0.0, y as f32),
+            Vec2::new(WINDOW_GRID_WIDTH as f32, y as f32),
+            Color::DARK_GRAY,
+        );
     }
 }
 
-fn draw_triangles(mut gizmos: Gizmos) {
-    let width_pixels: f32 = window_width_px();
-    let x_offset = -0.5 * width_pixels;
-    let height_pixels: f32 = window_height_px();
-    let y_offset = -0.5 * height_pixels;
-    let x_max: f32 = width_pixels / 2.;
-    let y_max: f32 = height_pixels / 2.;
-    let x_min: f32 = -x_max;
-    let y_min: f32 = -y_max;
-    let grid_count_x = grid_count_x();
-    let grid_count_y = grid_count_y();
-
-    // draw grid
-    for i in 0..grid_count_x {
-        let x = i as f32 * VIEW_SCALE + x_offset;
-        gizmos.line_2d(Vec2::new(x, y_min), Vec2::new(x, y_max), Color::DARK_GRAY);
-    }
-
-    for i in 0..grid_count_y {
-        let y = i as f32 * VIEW_SCALE + y_offset;
-        gizmos.line_2d(Vec2::new(x_min, y), Vec2::new(x_max, y), Color::DARK_GRAY);
-    }
-
-    // bottom row triangles
-    let period_x = (SIDE_LENGTH + GAP_SIZE) as f32 * VIEW_SCALE;
-    let half_side_left_min_x = x_min - SIDE_LENGTH_HALF as f32 * VIEW_SCALE;
-    let mut origin = Vec2::new(half_side_left_min_x, y_min);
-    for _ in 0..6 {
-        triangle_up(origin, &mut gizmos);
-        origin = Vec2::new(origin.x + period_x, origin.y);
-    }
-
-    // row 2 triangles
-    let half_gap_right_min_x = x_min + GAP_SIZE_HALF as f32 * VIEW_SCALE;
-    origin = Vec2::new(half_gap_right_min_x, 0.);
-    for _ in 0..5 {
-        triangle_down(origin, &mut gizmos);
-        origin = Vec2::new(origin.x + period_x, origin.y);
-    }
-
-    // row 3 triangles
-    origin = Vec2::new(half_gap_right_min_x, 0.);
-    for _ in 0..5 {
-        triangle_up(origin, &mut gizmos);
-        origin = Vec2::new(origin.x + period_x, origin.y);
-    }
-
-    // top row triangles
-    origin = Vec2::new(half_side_left_min_x, y_max);
-    for _ in 0..6 {
-        triangle_down(origin, &mut gizmos);
-        origin = Vec2::new(origin.x + period_x, origin.y);
+fn draw_icoface_outlines(gizmos: &mut Gizmos, icosahedron: &Icosahedron) {
+    for (icoface_y, row) in icosahedron.faces.iter().enumerate() {
+        for (icoface_x, icoface) in row.iter().enumerate() {
+            origins_for_icoface_coordinates(icoface_x, icoface_y)
+                .iter()
+                .for_each(|origin| {
+                    if icoface_y % 2 == 0 {
+                        draw_deltille_subdivisions_up(icoface, origin, Color::GRAY, gizmos);
+                        draw_triangle_up(origin, FACE_GRID_WIDTH as f32, Color::WHITE, gizmos);
+                    } else {
+                        draw_deltille_subdivisions_down(icoface, origin, Color::GRAY, gizmos);
+                        draw_triangle_down(origin, FACE_GRID_WIDTH as f32, Color::WHITE, gizmos);
+                    }
+                })
+        }
     }
 }
 
-fn grid_count_x() -> u16 {
-    return (SIDE_LENGTH + GAP_SIZE) * 5;
+const ONE_TWO_ROW_ORIGIN_X: f32 = GAP_GRID_WIDTH as f32 + (FACE_GRID_WIDTH as f32 * 0.5);
+const THREE_FOUR_ROW_ORIGIN_X: f32 = (GAP_GRID_WIDTH as f32 * 2.0) + FACE_GRID_WIDTH as f32;
+const ICOFACE_ROW_ORIGINS: [Vec2; 4] = [
+    Vec2::new(
+        ONE_TWO_ROW_ORIGIN_X,
+        FACE_GRID_HEIGHT as f32 + FACE_GRID_HEIGHT_HALF,
+    ),
+    Vec2::new(
+        ONE_TWO_ROW_ORIGIN_X,
+        FACE_GRID_HEIGHT as f32 - FACE_GRID_HEIGHT_HALF,
+    ),
+    Vec2::new(THREE_FOUR_ROW_ORIGIN_X, FACE_GRID_HEIGHT_HALF),
+    Vec2::new(
+        THREE_FOUR_ROW_ORIGIN_X,
+        WINDOW_GRID_HEIGHT as f32 - FACE_GRID_HEIGHT_HALF,
+    ),
+];
+
+fn origins_for_icoface_coordinates(x: usize, y: usize) -> Vec<Vec2> {
+    let mut origins: Vec<Vec2> = Vec::with_capacity(if y < 2 { 1 } else { 2 });
+    let row_origin = ICOFACE_ROW_ORIGINS[y];
+    let first_origin = Vec2::new(
+        row_origin.x + (x as f32 * (FACE_GRID_WIDTH as f32 + GAP_GRID_WIDTH as f32 * 2.0)),
+        row_origin.y,
+    );
+    origins.push(first_origin);
+    // duplicate to simulate wrapping
+    if y > 1 && x == 4 {
+        origins.push(Vec2::new(
+            first_origin.x - WINDOW_GRID_WIDTH as f32,
+            first_origin.y,
+        ));
+    }
+    return origins;
 }
 
-fn triangle_grid_height() -> u16 {
-    return (SIDE_LENGTH as f32 * f32::sqrt(0.75)).ceil() as u16;
-}
-
-fn grid_count_y() -> u16 {
-    return triangle_grid_height() * 2;
-}
-
-fn window_width_px() -> f32 {
-    return grid_count_x() as f32 * VIEW_SCALE;
-}
-
-fn window_height_px() -> f32 {
-    return grid_count_y() as f32 * VIEW_SCALE;
-}
-
-fn triangle_up(origin: Vec2, gizmos: &mut Gizmos) {
-    let right_x = origin.x + SIDE_LENGTH as f32 * VIEW_SCALE;
-    let right = Vec2::new(right_x, origin.y);
-    let top_x = origin.x + SIDE_LENGTH as f32 / 2. * VIEW_SCALE;
-    let top_y = origin.y + SIDE_LENGTH as f32 * f32::sqrt(0.75) * VIEW_SCALE;
-    let top = Vec2::new(top_x, top_y);
-    let color = Color::GREEN;
-    gizmos.line_2d(origin, right, color);
-    gizmos.line_2d(origin, top, color);
+fn draw_triangle_up(origin: &Vec2, width: f32, color: Color, gizmos: &mut Gizmos) {
+    let half_width = width / 2.0;
+    let half_height = width * SQRT_0_POINT_75 / 2.0;
+    let left = Vec2::new(origin.x - half_width, origin.y - half_height);
+    let right = Vec2::new(origin.x + half_width, origin.y - half_height);
+    let top = Vec2::new(origin.x, origin.y + half_height);
+    gizmos.line_2d(left, right, color);
+    gizmos.line_2d(left, top, color);
     gizmos.line_2d(top, right, color);
 }
 
-fn triangle_down(origin: Vec2, gizmos: &mut Gizmos) {
-    let right_x = origin.x + SIDE_LENGTH as f32 * VIEW_SCALE;
-    let right = Vec2::new(right_x, origin.y);
-    let top_x = origin.x + SIDE_LENGTH as f32 / 2. * VIEW_SCALE;
-    let top_y = origin.y - SIDE_LENGTH as f32 * f32::sqrt(0.75) * VIEW_SCALE;
-    let top = Vec2::new(top_x, top_y);
-    let color = Color::GREEN;
-    gizmos.line_2d(origin, right, color);
-    gizmos.line_2d(origin, top, color);
-    gizmos.line_2d(top, right, color);
+fn draw_triangle_down(origin: &Vec2, width: f32, color: Color, gizmos: &mut Gizmos) {
+    let half_width = width / 2.0;
+    let half_height = width * SQRT_0_POINT_75 / 2.0;
+    let left = Vec2::new(origin.x - half_width, origin.y + half_height);
+    let right = Vec2::new(origin.x + half_width, origin.y + half_height);
+    let down = Vec2::new(origin.x, origin.y - half_height);
+    gizmos.line_2d(left, right, color);
+    gizmos.line_2d(left, down, color);
+    gizmos.line_2d(down, right, color);
+}
+
+fn offset_for_deltille_component_up_icoface(x: usize, y: usize) -> Vec2 {
+    let row_size = (y + 2) / 2;
+    let x_offset = -(row_size as f32 - 1.0) * DELTILLE_GRID_WIDTH_HALF
+        + (DELTILLE_GRID_WIDTH as f32 * x as f32);
+    let visual_row_depth = (y + 1) / 2;
+    let y_offset = FACE_GRID_HEIGHT_HALF
+        - DELTILLE_GRID_HEIGHT_HALF
+        - (visual_row_depth as f32 * DELTILLE_GRID_HEIGHT as f32);
+    return Vec2::new(x_offset, y_offset);
+}
+
+fn offset_for_deltille_component_down_icoface(x: usize, y: usize) -> Vec2 {
+    let row_size = FACE_DELTILLE_WIDTH - (y + 1) / 2;
+    let x_offset = -(row_size as f32 - 1.0) * DELTILLE_GRID_WIDTH_HALF
+        + (DELTILLE_GRID_WIDTH as f32 * x as f32);
+    let visual_row_depth = y / 2;
+    let y_offset = FACE_GRID_HEIGHT_HALF
+        - DELTILLE_GRID_HEIGHT_HALF
+        - (visual_row_depth as f32 * DELTILLE_GRID_HEIGHT as f32);
+    return Vec2::new(x_offset, y_offset);
+}
+
+fn draw_deltille_subdivisions_up(
+    icoface: &IcoFace,
+    origin: &Vec2,
+    color: Color,
+    gizmos: &mut Gizmos,
+) {
+    for (y, row) in icoface.deltilles.iter().enumerate() {
+        if y % 2 == 0 {
+            for x in 0..row.len() {
+                let offset = offset_for_deltille_component_up_icoface(x, y);
+                draw_triangle_up(
+                    &Vec2::new(origin.x + offset.x, origin.y + offset.y),
+                    DELTILLE_GRID_WIDTH as f32,
+                    color,
+                    gizmos,
+                );
+            }
+        } else {
+            for x in 0..row.len() {
+                let offset = offset_for_deltille_component_up_icoface(x, y);
+                draw_triangle_down(
+                    &Vec2::new(origin.x + offset.x, origin.y + offset.y),
+                    DELTILLE_GRID_WIDTH as f32,
+                    color,
+                    gizmos,
+                );
+            }
+        }
+    }
+}
+
+fn draw_deltille_subdivisions_down(
+    icoface: &IcoFace,
+    origin: &Vec2,
+    color: Color,
+    gizmos: &mut Gizmos,
+) {
+    for (y, row) in icoface.deltilles.iter().enumerate() {
+        if y % 2 == 0 {
+            for x in 0..row.len() {
+                let offset = offset_for_deltille_component_down_icoface(x, y);
+                draw_triangle_down(
+                    &Vec2::new(origin.x + offset.x, origin.y + offset.y),
+                    DELTILLE_GRID_WIDTH as f32,
+                    color,
+                    gizmos,
+                );
+            }
+        } else {
+            for x in 0..row.len() {
+                let offset = offset_for_deltille_component_down_icoface(x, y);
+                draw_triangle_up(
+                    &Vec2::new(origin.x + offset.x, origin.y + offset.y),
+                    DELTILLE_GRID_WIDTH as f32,
+                    color,
+                    gizmos,
+                );
+            }
+        }
+    }
+}
+
+// just for fun! replace this with actual sprite choices
+fn place_deltille_sprites(mut commands: Commands, icosahedron_query: Query<&Icosahedron>) {
+    let icosahedron = icosahedron_query.get_single().unwrap();
+    for (icoface_y, row) in icosahedron.faces.iter().enumerate() {
+        for (icoface_x, icoface) in row.iter().enumerate() {
+            origins_for_icoface_coordinates(icoface_x, icoface_y)
+                .iter()
+                .for_each(|origin| {
+                    if icoface_y % 2 == 0 {
+                        place_deltille_sprites_up(&mut commands, icoface, origin);
+                    } else {
+                        place_deltille_sprites_down(&mut commands, icoface, origin);
+                    }
+                })
+        }
+    }
+}
+
+fn place_deltille_sprites_up(commands: &mut Commands, icoface: &IcoFace, origin: &Vec2) {
+    for (y, row) in icoface.deltilles.iter().enumerate() {
+        for (x, deltille_options) in row.iter().enumerate() {
+            let offset = offset_for_deltille_component_up_icoface(x, y);
+            let image_handle = deltille_options.first().unwrap().image_handle.clone();
+            commands.spawn(SpriteBundle {
+                texture: image_handle,
+                transform: Transform {
+                    translation: Vec3::new(origin.x + offset.x, origin.y + offset.y, 0.0),
+                    ..default()
+                },
+                sprite: Sprite {
+                    custom_size: Option::Some(Vec2::new(
+                        DELTILLE_GRID_WIDTH as f32,
+                        DELTILLE_GRID_HEIGHT as f32,
+                    )),
+                    flip_y: y % 2 != 0,
+                    ..default()
+                },
+                ..default()
+            });
+        }
+    }
+}
+
+fn place_deltille_sprites_down(commands: &mut Commands, icoface: &IcoFace, origin: &Vec2) {
+    for (y, row) in icoface.deltilles.iter().enumerate() {
+        for (x, deltille_options) in row.iter().enumerate() {
+            let offset = offset_for_deltille_component_down_icoface(x, y);
+            let image_handle = deltille_options.first().unwrap().image_handle.clone();
+            commands.spawn(SpriteBundle {
+                texture: image_handle,
+                transform: Transform {
+                    translation: Vec3::new(origin.x + offset.x, origin.y + offset.y, 0.0),
+                    ..default()
+                },
+                sprite: Sprite {
+                    flip_y: y % 2 == 0,
+                    ..default()
+                },
+                ..default()
+            });
+        }
+    }
 }
