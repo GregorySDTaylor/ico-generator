@@ -84,9 +84,9 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     });
 }
 
-fn draw_debug(mut gizmos: Gizmos, icosahedron: Res<Icosahedron>, precalculated_coordinates: Res<PreCalculatedCoordinates>) {
+fn draw_debug(mut gizmos: Gizmos, precalculated_coordinates: Res<PreCalculatedCoordinates>) {
     draw_pixel_grid(&mut gizmos);
-    draw_icoface_outlines(&mut gizmos, icosahedron, &precalculated_coordinates);
+    draw_icoface_outlines(&mut gizmos, &precalculated_coordinates);
 }
 
 fn draw_pixel_grid(gizmos: &mut Gizmos) {
@@ -108,35 +108,30 @@ fn draw_pixel_grid(gizmos: &mut Gizmos) {
 
 fn draw_icoface_outlines(
     gizmos: &mut Gizmos,
-    icosahedron: Res<Icosahedron>,
     precalculated_coordinates: &Res<PreCalculatedCoordinates>,
 ) {
-    for (icoface_y, row) in icosahedron.faces.iter().enumerate() {
-        for (icoface_x, icoface) in row.iter().enumerate() {
-            origins_for_icoface_coordinates(icoface_x, icoface_y)
+    for icoface_coordinates in precalculated_coordinates.all_ico_face_coordinates.iter() {
+        origins_for_icoface_coordinates(icoface_coordinates.x, icoface_coordinates.y)
                 .iter()
                 .for_each(|origin| {
-                    if icoface_y % 2 == 0 {
+                    if icoface_coordinates.y % 2 == 0 {
                         draw_deltille_subdivisions_up(
-                            icoface,
                             origin,
                             Color::GRAY,
                             gizmos,
                             precalculated_coordinates,
                         );
-                        draw_triangle_up(origin, FACE_GRID_WIDTH as f32, Color::WHITE, gizmos);
+                        draw_triangle(origin, &Orientation::Up, FACE_GRID_WIDTH as f32, Color::WHITE, gizmos);
                     } else {
                         draw_deltille_subdivisions_down(
-                            icoface,
                             origin,
                             Color::GRAY,
                             gizmos,
                             precalculated_coordinates,
                         );
-                        draw_triangle_down(origin, FACE_GRID_WIDTH as f32, Color::WHITE, gizmos);
+                        draw_triangle(origin, &Orientation::Down, FACE_GRID_WIDTH as f32, Color::WHITE, gizmos);
                     }
                 })
-        }
     }
 }
 
@@ -205,16 +200,6 @@ fn draw_triangle(
     }
 }
 
-// TODO DELETE
-fn draw_triangle_up(origin: &Vec2, width: f32, color: Color, gizmos: &mut Gizmos) {
-    draw_triangle(origin, &Orientation::Up, width, color, gizmos);
-}
-
-// TODO DELETE
-fn draw_triangle_down(origin: &Vec2, width: f32, color: Color, gizmos: &mut Gizmos) {
-    draw_triangle(origin, &Orientation::Down, width, color, gizmos);
-}
-
 fn offset_for_deltille_component_up_icoface(coordinates: &DeltilleCoordinates) -> Vec2 {
     let row_size = (coordinates.y + 2) / 2;
     let x_offset = -(row_size as f32 - 1.0) * DELTILLE_GRID_WIDTH_HALF
@@ -238,7 +223,6 @@ fn offset_for_deltille_component_down_icoface(coordinates: &DeltilleCoordinates)
 }
 
 fn draw_deltille_subdivisions_up(
-    icoface: &IcoFace,
     origin: &Vec2,
     color: Color,
     gizmos: &mut Gizmos,
@@ -261,7 +245,6 @@ fn draw_deltille_subdivisions_up(
 }
 
 fn draw_deltille_subdivisions_down(
-    icoface: &IcoFace,
     origin: &Vec2,
     color: Color,
     gizmos: &mut Gizmos,
