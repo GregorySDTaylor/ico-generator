@@ -1,0 +1,162 @@
+[
+    {
+        "image_path": "land_both_corners.png",
+        "sockets": {
+            "Up": {
+                "nw": "",
+                "ne": "",
+                "s": ""
+            }
+        }
+    },
+    {
+        "image_path": "land_corner_side.png",
+        "sockets": {
+            "Up": {
+                "nw": "",
+                "ne": "",
+                "s": ""
+            }
+        }
+    },
+    {
+        "image_path": "land_corner_top.png",
+        "sockets": {
+            "Up": {
+                "nw": "",
+                "ne": "",
+                "s": ""
+            }
+        }
+    },
+    {
+        "image_path": "land_full.png",
+        "sockets": {
+            "Up": {
+                "nw": "",
+                "ne": "",
+                "s": ""
+            }
+        }
+    },
+    {
+        "image_path": "land_slope_side.png",
+        "sockets": {
+            "Up": {
+                "nw": "",
+                "ne": "",
+                "s": ""
+            }
+        }
+    },
+    {
+        "image_path": "land_straight_side.png",
+        "sockets": {
+            "Up": {
+                "nw": "",
+                "ne": "",
+                "s": ""
+            }
+        }
+    },
+    {
+        "image_path": "land_top_right.png",
+        "sockets": {
+            "Up": {
+                "nw": "",
+                "ne": "",
+                "s": ""
+            }
+        }
+    },
+    {
+        "image_path": "ocean_both_corners.png",
+        "sockets": {
+            "Up": {
+                "nw": "",
+                "ne": "",
+                "s": ""
+            }
+        }
+    },
+    {
+        "image_path": "ocean_corner_side.png",
+        "sockets": {
+            "Up": {
+                "nw": "",
+                "ne": "",
+                "s": ""
+            }
+        }
+    },
+    {
+        "image_path": "ocean_corner_top.png",
+        "sockets": {
+            "Up": {
+                "nw": "",
+                "ne": "",
+                "s": ""
+            }
+        }
+    },
+    {
+        "image_path": "ocean_full.png",
+        "sockets": {
+            "Up": {
+                "nw": "",
+                "ne": "",
+                "s": ""
+            }
+        }
+    },
+    {
+        "image_path": "ocean_island_1.png",
+        "sockets": {
+            "Up": {
+                "nw": "",
+                "ne": "",
+                "s": ""
+            }
+        }
+    },
+    {
+        "image_path": "ocean_island_2.png",
+        "sockets": {
+            "Up": {
+                "nw": "",
+                "ne": "",
+                "s": ""
+            }
+        }
+    },
+    {
+        "image_path": "ocean_slope_side.png",
+        "sockets": {
+            "Up": {
+                "nw": "",
+                "ne": "",
+                "s": ""
+            }
+        }
+    },
+    {
+        "image_path": "ocean_straight_side.png",
+        "sockets": {
+            "Up": {
+                "nw": "",
+                "ne": "",
+                "s": ""
+            }
+        }
+    },
+    {
+        "image_path": "ocean_top_right.png",
+        "sockets": {
+            "Up": {
+                "nw": "",
+                "ne": "",
+                "s": ""
+            }
+        }
+    }
+]

@@ -2,11 +2,13 @@ mod config_constants;
 mod icosahedron;
 
 use std::array::from_fn;
+use std::fs;
 
 use bevy::prelude::*;
 use bevy::window::WindowResolution;
 use config_constants::*;
 use icosahedron::*;
+use rand::prelude::SliceRandom;
 
 fn main() {
     App::new()
@@ -32,7 +34,32 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn up_options_from(deltille_inputs: &Vec<Deltille>) -> Vec<Deltille> {
+    let mut deltilles = Vec::with_capacity(deltille_inputs.len() * 2);
+    for deltille in deltille_inputs.iter() {
+        deltilles.push(deltille.clone());
+        let mut flipped = deltille.clone();
+        flipped.flip_x = true;
+        deltilles.push(flipped);
+    }
+    return deltilles;
+}
+
+fn down_options_from(deltille_inputs: &Vec<Deltille>) -> Vec<Deltille> {
+    let mut deltilles = Vec::with_capacity(deltille_inputs.len() * 2);
+    for deltille in deltille_inputs.iter() {
+        let mut clone = deltille.clone();
+        clone.flip_y = true;
+        deltilles.push(clone);
+        let mut flipped = deltille.clone();
+        flipped.flip_x = true;
+        flipped.flip_y = true;
+        deltilles.push(flipped);
+    }
+    return deltilles;
+}
+
+fn setup(mut commands: Commands) {
     commands.spawn(Camera2dBundle {
         projection: OrthographicProjection {
             scale: 1.0 / VIEW_SCALE,
@@ -46,32 +73,13 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         ..default()
     });
 
-    let trile_handle: Handle<Image> = asset_server.load("land_both_corners.png");
+    let deltille_json = fs::read_to_string("assets/deltilles.json").unwrap_or("[]".to_string());
+    let deltilles: Vec<Deltille> = serde_json::from_str(&deltille_json).unwrap();
 
-    let up_options = vec![Deltille {
-        image_handle: trile_handle.clone(),
-        flip_x: false,
-        flip_y: false,
-        sockets: Sockets::Up {
-            nw: "".to_string(),
-            ne: "".to_string(),
-            s: "".to_string(),
-        },
-    }];
-
-    let down_options = vec![Deltille {
-        image_handle: trile_handle.clone(),
-        flip_x: false,
-        flip_y: true,
-        sockets: Sockets::Down {
-            n: "".to_string(),
-            se: "".to_string(),
-            sw: "".to_string(),
-        },
-    }];
+    let up_options = up_options_from(&deltilles);
+    let down_options = down_options_from(&deltilles);
 
     let up_icoface = IcoFace::with_initial_options(Orientation::Up, &up_options, &down_options);
-
     let down_icoface = IcoFace::with_initial_options(Orientation::Down, &up_options, &down_options);
 
     commands.insert_resource(Icosahedron {
@@ -112,26 +120,38 @@ fn draw_icoface_outlines(
 ) {
     for icoface_coordinates in precalculated_coordinates.all_ico_face_coordinates.iter() {
         origins_for_icoface_coordinates(icoface_coordinates.x, icoface_coordinates.y)
-                .iter()
-                .for_each(|origin| {
-                    if icoface_coordinates.y % 2 == 0 {
-                        draw_deltille_subdivisions_up(
-                            origin,
-                            Color::GRAY,
-                            gizmos,
-                            precalculated_coordinates,
-                        );
-                        draw_triangle(origin, &Orientation::Up, FACE_GRID_WIDTH as f32, Color::WHITE, gizmos);
-                    } else {
-                        draw_deltille_subdivisions_down(
-                            origin,
-                            Color::GRAY,
-                            gizmos,
-                            precalculated_coordinates,
-                        );
-                        draw_triangle(origin, &Orientation::Down, FACE_GRID_WIDTH as f32, Color::WHITE, gizmos);
-                    }
-                })
+            .iter()
+            .for_each(|origin| {
+                if icoface_coordinates.y % 2 == 0 {
+                    draw_deltille_subdivisions_up(
+                        origin,
+                        Color::GRAY,
+                        gizmos,
+                        precalculated_coordinates,
+                    );
+                    draw_triangle(
+                        origin,
+                        &Orientation::Up,
+                        FACE_GRID_WIDTH as f32,
+                        Color::WHITE,
+                        gizmos,
+                    );
+                } else {
+                    draw_deltille_subdivisions_down(
+                        origin,
+                        Color::GRAY,
+                        gizmos,
+                        precalculated_coordinates,
+                    );
+                    draw_triangle(
+                        origin,
+                        &Orientation::Down,
+                        FACE_GRID_WIDTH as f32,
+                        Color::WHITE,
+                        gizmos,
+                    );
+                }
+            })
     }
 }
 
@@ -274,6 +294,7 @@ fn place_deltille_sprites(
     mut commands: Commands,
     icosahedron: Res<Icosahedron>,
     precalculated_coordinates: Res<PreCalculatedCoordinates>,
+    asset_server: Res<AssetServer>,
 ) {
     for (icoface_y, row) in icosahedron.faces.iter().enumerate() {
         for (icoface_x, icoface) in row.iter().enumerate() {
@@ -286,6 +307,7 @@ fn place_deltille_sprites(
                             icoface,
                             origin,
                             &precalculated_coordinates,
+                            &asset_server,
                         );
                     } else {
                         place_deltille_sprites_down(
@@ -293,6 +315,7 @@ fn place_deltille_sprites(
                             icoface,
                             origin,
                             &precalculated_coordinates,
+                            &asset_server,
                         );
                     }
                 })
@@ -305,17 +328,16 @@ fn place_deltille_sprites_up(
     icoface: &IcoFace,
     origin: &Vec2,
     precalculated_coordinates: &Res<PreCalculatedCoordinates>,
+    asset_server: &Res<AssetServer>,
 ) {
     for deltille_coordinates in precalculated_coordinates.all_up_deltille_coordinates.iter() {
         let offset = offset_for_deltille_component_up_icoface(deltille_coordinates);
-        let image_handle = icoface
+        let deltille = icoface
             .get_deltille_options_at(deltille_coordinates)
-            .and_then(|options| options.first())
-            .unwrap()
-            .image_handle
-            .clone();
+            .and_then(|options| options.choose(&mut rand::thread_rng()))
+            .unwrap();
         commands.spawn(SpriteBundle {
-            texture: image_handle,
+            texture: asset_server.load(&deltille.image_path),
             transform: Transform {
                 translation: Vec3::new(origin.x + offset.x, origin.y + offset.y, 0.0),
                 ..default()
@@ -325,7 +347,8 @@ fn place_deltille_sprites_up(
                     DELTILLE_GRID_WIDTH as f32,
                     DELTILLE_GRID_HEIGHT as f32,
                 )),
-                flip_y: deltille_coordinates.y % 2 != 0,
+                flip_x: deltille.flip_x,
+                flip_y: deltille.flip_y,
                 ..default()
             },
             ..default()
@@ -338,27 +361,26 @@ fn place_deltille_sprites_down(
     icoface: &IcoFace,
     origin: &Vec2,
     precalculated_coordinates: &Res<PreCalculatedCoordinates>,
+    asset_server: &Res<AssetServer>,
 ) {
     for deltille_coordinates in precalculated_coordinates
         .all_down_deltille_coordinates
         .iter()
     {
         let offset = offset_for_deltille_component_down_icoface(deltille_coordinates);
-        let image_handle = icoface
+        let deltille = icoface
             .get_deltille_options_at(deltille_coordinates)
-            .unwrap()
-            .first()
-            .unwrap()
-            .image_handle
-            .clone();
+            .and_then(|options| options.choose(&mut rand::thread_rng()))
+            .unwrap();
         commands.spawn(SpriteBundle {
-            texture: image_handle,
+            texture: asset_server.load(&deltille.image_path),
             transform: Transform {
                 translation: Vec3::new(origin.x + offset.x, origin.y + offset.y, 0.0),
                 ..default()
             },
             sprite: Sprite {
-                flip_y: deltille_coordinates.y % 2 == 0,
+                flip_x: deltille.flip_x,
+                flip_y: deltille.flip_y,
                 ..default()
             },
             ..default()

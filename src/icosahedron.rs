@@ -1,11 +1,9 @@
 use core::fmt;
+use serde::{Deserialize, Serialize};
 use std::array::from_fn;
 
 use crate::config_constants::*;
-use bevy::{
-    ecs::system::Resource,
-    prelude::{Handle, Image},
-};
+use bevy::ecs::system::Resource;
 
 #[derive(Clone, Copy)]
 pub enum Orientation {
@@ -57,7 +55,6 @@ impl IcoFace {
             .get(coordinates.y)
             .and_then(|row| row.get(coordinates.x));
     }
-
 }
 
 fn up_face_deltilles_initial(
@@ -102,21 +99,27 @@ fn down_face_deltilles_initial(
     return rows;
 }
 
-#[derive(Clone)]
+fn default_flip() -> bool {
+    false
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Deltille {
-    pub image_handle: Handle<Image>,
+    pub image_path: String,
+    #[serde(default = "default_flip")]
     pub flip_x: bool,
+    #[serde(default = "default_flip")]
     pub flip_y: bool,
     pub sockets: Sockets,
 }
 
 impl fmt::Debug for Deltille {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", if self.flip_y {"∨"} else {"∧"})
+        write!(f, "{}", if self.flip_y { "∨" } else { "∧" })
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum Sockets {
     // NW   NE
     //    ∧
