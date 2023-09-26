@@ -1,6 +1,6 @@
 use bevy::prelude::Vec2;
 
-pub const VIEW_SCALE: f32 = 9.0;
+pub const VIEW_SCALE: f32 = 8.0;
 pub const DELTILLE_GRID_WIDTH: usize = 16;
 pub const GAP_GRID_WIDTH_HALF: usize = 0;
 pub const FACE_DELTILLE_WIDTH: usize = 3;
