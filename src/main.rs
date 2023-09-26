@@ -36,9 +36,9 @@ fn main() {
         .run();
 }
 
-fn screenshot(main_window: Query<Entity, With<PrimaryWindow>>, mut screenshotManager: ResMut<ScreenshotManager>) {
+fn screenshot(main_window: Query<Entity, With<PrimaryWindow>>, mut screenshot_manager: ResMut<ScreenshotManager>) {
     fs::create_dir_all("generated").unwrap();
-    screenshotManager.save_screenshot_to_disk(main_window.single(), "assets/generated/screenshot.png").unwrap();
+    screenshot_manager.save_screenshot_to_disk(main_window.single(), "assets/generated/screenshot.png").unwrap();
 }
 
 fn up_options_from(deltille_inputs: &Vec<Deltille>) -> Vec<Deltille> {
