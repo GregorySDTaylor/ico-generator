@@ -5,7 +5,8 @@ use std::array::from_fn;
 use std::fs;
 
 use bevy::prelude::*;
-use bevy::window::WindowResolution;
+use bevy::render::view::screenshot::ScreenshotManager;
+use bevy::window::{WindowResolution, PrimaryWindow};
 use config_constants::*;
 use icosahedron::*;
 use rand::prelude::SliceRandom;
@@ -30,8 +31,14 @@ fn main() {
         .insert_resource(PreCalculatedCoordinates::generate())
         .add_systems(Startup, setup)
         .add_systems(PostStartup, place_deltille_sprites)
+        .add_systems(PostStartup, screenshot.after(place_deltille_sprites))
         .add_systems(Update, draw_debug)
         .run();
+}
+
+fn screenshot(main_window: Query<Entity, With<PrimaryWindow>>, mut screenshotManager: ResMut<ScreenshotManager>) {
+    fs::create_dir_all("generated").unwrap();
+    screenshotManager.save_screenshot_to_disk(main_window.single(), "assets/generated/screenshot.png").unwrap();
 }
 
 fn up_options_from(deltille_inputs: &Vec<Deltille>) -> Vec<Deltille> {
