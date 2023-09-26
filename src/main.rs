@@ -119,87 +119,54 @@ fn draw_icoface_outlines(
     precalculated_coordinates: &Res<PreCalculatedCoordinates>,
 ) {
     for icoface_coordinates in precalculated_coordinates.all_ico_face_coordinates.iter() {
-        origins_for_icoface_coordinates(icoface_coordinates.x, icoface_coordinates.y)
-            .iter()
-            .for_each(|origin| {
-                if icoface_coordinates.y % 2 == 0 {
-                    draw_deltille_subdivisions_up(
-                        origin,
-                        Color::GRAY,
-                        gizmos,
-                        precalculated_coordinates,
-                    );
-                    draw_triangle(
-                        origin,
-                        &Orientation::Up,
-                        FACE_GRID_WIDTH as f32,
-                        Color::WHITE,
-                        gizmos,
-                    );
-                } else {
-                    draw_deltille_subdivisions_down(
-                        origin,
-                        Color::GRAY,
-                        gizmos,
-                        precalculated_coordinates,
-                    );
-                    draw_triangle(
-                        origin,
-                        &Orientation::Down,
-                        FACE_GRID_WIDTH as f32,
-                        Color::WHITE,
-                        gizmos,
-                    );
-                }
-            })
+        let origin = origin_for_icoface_coordinates(icoface_coordinates.x, icoface_coordinates.y);
+        if icoface_coordinates.y % 2 == 0 {
+            draw_deltille_subdivisions_up(&origin, Color::GRAY, gizmos, precalculated_coordinates);
+            draw_triangle(
+                &origin,
+                &Orientation::Up,
+                FACE_GRID_WIDTH as f32,
+                FACE_GRID_HEIGHT as f32,
+                Color::WHITE,
+                gizmos,
+            );
+        } else {
+            draw_deltille_subdivisions_down(
+                &origin,
+                Color::GRAY,
+                gizmos,
+                precalculated_coordinates,
+            );
+            draw_triangle(
+                &origin,
+                &Orientation::Down,
+                FACE_GRID_WIDTH as f32,
+                FACE_GRID_HEIGHT as f32,
+                Color::WHITE,
+                gizmos,
+            );
+        }
     }
 }
 
-const ONE_TWO_ROW_ORIGIN_X: f32 = GAP_GRID_WIDTH as f32 + (FACE_GRID_WIDTH as f32 * 0.5);
-const THREE_FOUR_ROW_ORIGIN_X: f32 = (GAP_GRID_WIDTH as f32 * 2.0) + FACE_GRID_WIDTH as f32;
-const ICOFACE_ROW_ORIGINS: [Vec2; 4] = [
-    Vec2::new(
-        ONE_TWO_ROW_ORIGIN_X,
-        FACE_GRID_HEIGHT as f32 + FACE_GRID_HEIGHT_HALF,
-    ),
-    Vec2::new(
-        ONE_TWO_ROW_ORIGIN_X,
-        FACE_GRID_HEIGHT as f32 - FACE_GRID_HEIGHT_HALF,
-    ),
-    Vec2::new(THREE_FOUR_ROW_ORIGIN_X, FACE_GRID_HEIGHT_HALF),
-    Vec2::new(
-        THREE_FOUR_ROW_ORIGIN_X,
-        WINDOW_GRID_HEIGHT as f32 - FACE_GRID_HEIGHT_HALF,
-    ),
-];
-
-fn origins_for_icoface_coordinates(x: usize, y: usize) -> Vec<Vec2> {
-    let mut origins: Vec<Vec2> = Vec::with_capacity(if y < 2 { 1 } else { 2 });
+fn origin_for_icoface_coordinates(x: usize, y: usize) -> Vec2 {
     let row_origin = ICOFACE_ROW_ORIGINS[y];
-    let first_origin = Vec2::new(
+    return Vec2::new(
         row_origin.x + (x as f32 * (FACE_GRID_WIDTH as f32 + GAP_GRID_WIDTH as f32 * 2.0)),
         row_origin.y,
     );
-    origins.push(first_origin);
-    // duplicate to simulate wrapping
-    if y > 1 && x == 4 {
-        origins.push(Vec2::new(
-            first_origin.x - WINDOW_GRID_WIDTH as f32,
-            first_origin.y,
-        ));
-    }
-    return origins;
 }
 
 fn draw_triangle(
     origin: &Vec2,
     orientation: &Orientation,
     width: f32,
+    height: f32,
     color: Color,
     gizmos: &mut Gizmos,
 ) {
     let half_width = width / 2.0;
-    let half_height = width * SQRT_0_POINT_75 / 2.0;
+    let half_height = height / 2.0;
     match orientation {
         Orientation::Up => {
             let left = Vec2::new(origin.x - half_width, origin.y - half_height);
@@ -258,6 +225,7 @@ fn draw_deltille_subdivisions_up(
                 &Orientation::Down
             },
             DELTILLE_GRID_WIDTH as f32,
+            DELTILLE_GRID_HEIGHT as f32,
             color,
             gizmos,
         );
@@ -283,6 +251,7 @@ fn draw_deltille_subdivisions_down(
                 &Orientation::Up
             },
             DELTILLE_GRID_WIDTH as f32,
+            DELTILLE_GRID_HEIGHT as f32,
             color,
             gizmos,
         );
@@ -298,27 +267,24 @@ fn place_deltille_sprites(
 ) {
     for (icoface_y, row) in icosahedron.faces.iter().enumerate() {
         for (icoface_x, icoface) in row.iter().enumerate() {
-            origins_for_icoface_coordinates(icoface_x, icoface_y)
-                .iter()
-                .for_each(|origin| {
-                    if icoface_y % 2 == 0 {
-                        place_deltille_sprites_up(
-                            &mut commands,
-                            icoface,
-                            origin,
-                            &precalculated_coordinates,
-                            &asset_server,
-                        );
-                    } else {
-                        place_deltille_sprites_down(
-                            &mut commands,
-                            icoface,
-                            origin,
-                            &precalculated_coordinates,
-                            &asset_server,
-                        );
-                    }
-                })
+            let origin = origin_for_icoface_coordinates(icoface_x, icoface_y);
+            if icoface_y % 2 == 0 {
+                place_deltille_sprites_up(
+                    &mut commands,
+                    icoface,
+                    &origin,
+                    &precalculated_coordinates,
+                    &asset_server,
+                );
+            } else {
+                place_deltille_sprites_down(
+                    &mut commands,
+                    icoface,
+                    &origin,
+                    &precalculated_coordinates,
+                    &asset_server,
+                );
+            }
         }
     }
 }
