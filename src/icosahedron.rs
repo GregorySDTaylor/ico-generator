@@ -14,6 +14,9 @@ pub enum Orientation {
     Down,
 }
 
+// TODO: maybe the icofaces and detilles just need an id, not a coordinate
+// TODO: Probably want an adjacency list
+
 #[derive(Resource)]
 pub struct Icosahedron {
     /// ```
@@ -23,6 +26,20 @@ pub struct Icosahedron {
     ///   ∨   ∨   ∨   ∨   ∨
     /// ```
     pub faces: [[IcoFace; 5]; 4],
+}
+
+impl Icosahedron {
+    pub fn get_icoface(&self, coordinates: &IcoFaceCoordinates) -> &IcoFace {
+        return &self.faces[coordinates.y][coordinates.x];
+    }
+
+    pub fn get_deltille_possibilities(&self, coordinates: &FullCoordinates) -> &Vec<Deltille> {
+        return &self.faces[coordinates.icoface.y][coordinates.icoface.x]
+            .deltilles
+            .get(coordinates.deltille.y)
+            .and_then(|row| row.get(coordinates.deltille.x))
+            .unwrap();
+    }
 }
 
 #[derive(Clone)]
@@ -132,7 +149,7 @@ pub enum Sockets {
     Down { n: String, se: String, sw: String },
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct IcoFaceCoordinates {
     pub x: usize,
     pub y: usize,
@@ -144,11 +161,17 @@ pub struct DeltilleCoordinates {
     pub y: usize,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct FullCoordinates {
+    pub icoface: IcoFaceCoordinates,
+    pub deltille: DeltilleCoordinates,
+}
+
 #[derive(Resource)]
 pub struct PreCalculatedCoordinates {
     pub all_ico_face_coordinates: [IcoFaceCoordinates; 20],
-    pub all_up_deltille_coordinates: [DeltilleCoordinates; ICOFACE_DELTILLE_COUNT],
-    pub all_down_deltille_coordinates: [DeltilleCoordinates; ICOFACE_DELTILLE_COUNT],
+    all_up_deltille_coordinates: [DeltilleCoordinates; ICOFACE_DELTILLE_COUNT],
+    all_down_deltille_coordinates: [DeltilleCoordinates; ICOFACE_DELTILLE_COUNT],
 }
 
 impl PreCalculatedCoordinates {
@@ -196,5 +219,22 @@ impl PreCalculatedCoordinates {
             };
         }
         return coordinates;
+    }
+
+    pub fn all_deltille_coordinates_for_orientation(
+        &self,
+        orientation: Orientation,
+    ) -> [DeltilleCoordinates; ICOFACE_DELTILLE_COUNT] {
+        return match orientation {
+            Orientation::Up => self.all_up_deltille_coordinates,
+            Orientation::Down => self.all_down_deltille_coordinates,
+        };
+    }
+
+    pub fn all_deltille_coordinates_for_icoface(
+        &self,
+        icoface: &IcoFace,
+    ) -> [DeltilleCoordinates; ICOFACE_DELTILLE_COUNT] {
+        return self.all_deltille_coordinates_for_orientation(icoface.orientation);
     }
 }
