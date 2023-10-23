@@ -3,12 +3,14 @@ mod graphics;
 mod icosahedron;
 mod wave_function_collapse;
 
+use std::collections::HashSet;
+
 use bevy::prelude::*;
 use bevy::window::WindowResolution;
 use config_constants::*;
+use icosahedron::Icosahedron;
 use graphics::*;
-use icosahedron::*;
-use wave_function_collapse::*;
+// use wave_function_collapse::*;
 
 fn main() {
     App::new()
@@ -27,15 +29,15 @@ fn main() {
                 })
                 .set(ImagePlugin::default_nearest()),
         )
-        .insert_resource(PreCalculatedCoordinates::generate())
-        .insert_resource(WfcState::new())
-        .add_systems(Update, iterate_wfc.run_if(not_yet_complete))
+        .insert_resource(Icosahedron::new(&[HashSet::new(), HashSet::new()]))
+        // .insert_resource(WfcState::new())
+        // .add_systems(Update, iterate_wfc.run_if(not_yet_complete))
         .add_systems(Startup, setup)
         .add_systems(Update, draw_debug)
         .run();
 }
 
-fn setup(mut commands: Commands) {
+fn setup(mut commands: Commands, mut gizmoConfig: ResMut<GizmoConfig>) {
     commands.spawn(Camera2dBundle {
         projection: OrthographicProjection {
             scale: 1.0 / VIEW_SCALE,
@@ -48,4 +50,5 @@ fn setup(mut commands: Commands) {
         ),
         ..default()
     });
+    gizmoConfig.line_width = 1.5;
 }
